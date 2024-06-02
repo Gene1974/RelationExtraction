@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from LMEmbedding import LMEmbedding
 
 class RC_CNN(nn.Module):
     def __init__(self, 
@@ -10,16 +10,27 @@ class RC_CNN(nn.Module):
         super().__init__()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        self.word_emb_dim = word_emb.shape[1]
+        if type(word_emb) == torch.Tensor:
+            self.n_words = word_emb.shape[0]
+            self.word_emb_dim = word_emb.shape[1]
+        else: # word_list
+            self.n_words = len(word_emb)
+            self.word_emb_dim = 300
+        #self.lm_emb_dim = 1024
+        self.lm_emb_dim = 300
         self.pos_emb_dim = pos_emb_dim
         self.max_sen_len = max_sen_len
         self.cnn_windows = cnn_windows
         self.filter_num = filter_num
         self.tagset_size = tagset_size
-        self.emb_dim = self.word_emb_dim + 2 * pos_emb_dim
+        self.emb_dim = self.word_emb_dim + 2 * pos_emb_dim + self.lm_emb_dim
         self.cnn_out_dim = self.filter_num * len(self.cnn_windows)
 
-        self.word_embeds = nn.Embedding.from_pretrained(word_emb, freeze = True)
+        if type(word_emb) == torch.Tensor:
+            self.word_embeds = nn.Embedding.from_pretrained(word_emb, freeze = True)
+        else:
+            self.word_embeds = nn.Embedding(self.n_words, self.word_emb_dim)
+        self.lm_embeds = LMEmbedding(self.lm_emb_dim)
         self.pos1_embeds = nn.Embedding(2 * max_sen_len - 1, pos_emb_dim)
         self.pos2_embeds = nn.Embedding(2 * max_sen_len - 1, pos_emb_dim)
         self.cnns = nn.ModuleList([nn.Sequential(nn.Conv1d(self.emb_dim, self.filter_num, window_size), nn.Tanh()) for window_size in self.cnn_windows])
@@ -27,11 +38,13 @@ class RC_CNN(nn.Module):
         self.dense = nn.Linear(self.cnn_out_dim, tagset_size)
         self.softmax = nn.Softmax(dim = -1)
         
-    def forward(self, word_ids, pos1_ids, pos2_ids):
-        word_emb = self.word_embeds(word_ids)
+    def forward(self, text, word_ids, pos1_ids, pos2_ids):
+        #word_emb = self.word_embeds(word_ids)
         pos1_emb = self.pos1_embeds(pos1_ids)
         pos2_emb = self.pos2_embeds(pos2_ids)
-        emb = torch.cat((word_emb, pos1_emb, pos2_emb), dim = -1) # (batch_size, max_sen_len, emb_size)
+        lm_emb = self.lm_embeds(text)
+        emb = torch.cat((lm_emb, pos1_emb, pos2_emb), dim = -1) # (batch_size, max_sen_len, emb_size)
+        #emb = torch.cat((word_emb, lm_emb, pos1_emb, pos2_emb), dim = -1) # (batch_size, max_sen_len, emb_size)
         emb = emb.permute(0, 2, 1) # (batch_size, emb_size, max_sen_len)
 
         cnn_outs = []

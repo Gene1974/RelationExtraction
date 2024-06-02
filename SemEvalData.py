@@ -30,12 +30,10 @@ class SemEvalData():
             'Entity-Destination(e1,e2)','Entity-Destination(e2,e1)',
             'Component-Whole(e1,e2)','Component-Whole(e2,e1)',
             'Member-Collection(e1,e2)','Member-Collection(e2,e1)',
-            'Message-Topic(e1,e2)', 'Message-Topic(e2,e1)',
-            #'Other'
+            'Message-Topic(e1,e2)', 'Message-Topic(e2,e1)'
         ]
         self.tagset_size = len(self.relation_list)
         self.NEGATIVE_TAG = 'Other'
-        #self.NO_RELATION_TAG = 'None'
         self.PAD_TAG = '<PAD>'
         self.OOV_TAG = '<OOV>'
         self.word_list = [self.PAD_TAG, self.OOV_TAG]
@@ -61,14 +59,11 @@ class SemEvalData():
         self.total_num = len(dataset)
         self.train_num = int(self.total_num * 0.8)
         self.valid_num = self.total_num - self.train_num
-        self.train_data = self.map_and_pad(dataset[:self.train_num])
-        self.valid_data = self.map_and_pad(dataset[self.train_num:])
-        self.test_data = self.map_and_pad(test_dataset)
+        self.map_and_pad(dataset)
+        self.map_and_pad(test_dataset)
         self.train_data = SemEvalDataset(dataset[:self.train_num])
         self.valid_data = SemEvalDataset(dataset[self.train_num:])
         self.test_data = SemEvalDataset(test_dataset)
-        self.data = dataset + test_dataset
-        
         
     
     def load_data(self, path):
@@ -129,21 +124,21 @@ class SemEvalData():
 
 def semeval_collate(batch):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    word_ids = torch.tensor([item['word_ids'] for item in batch], dtype = torch.long, device = device) # (batch_size, max_sen_len)
-    word_masks = torch.tensor([item['word_masks'] for item in batch], dtype = torch.bool, device = device)
-    pos1_ids = torch.tensor([item['pos1_ids'] for item in batch], dtype = torch.long, device = device)
-    pos2_ids = torch.tensor([item['pos2_ids'] for item in batch], dtype = torch.long, device = device)
+    text = [item['words'] for item in batch]
+    sen_len = max([len(sen)for sen in text])
+    word_ids = torch.tensor([item['word_ids'] for item in batch], dtype = torch.long, device = device)[:, :sen_len] # (batch_size, max_sen_len)
+    word_masks = torch.tensor([item['word_masks'] for item in batch], dtype = torch.bool, device = device)[:, :sen_len]
+    pos1_ids = torch.tensor([item['pos1_ids'] for item in batch], dtype = torch.long, device = device)[:, :sen_len]
+    pos2_ids = torch.tensor([item['pos2_ids'] for item in batch], dtype = torch.long, device = device)[:, :sen_len]
     tag_id = torch.tensor([item['tag_id'] for item in batch], dtype = torch.long, device = device)
-    return word_ids, pos1_ids, pos2_ids, tag_id
-
-#def 
+    return text, word_ids, pos1_ids, pos2_ids, tag_id
 
 
 if __name__ == '__main__':
     sem_set = SemEvalData('train')
     #item = sem_set.parse_sentence('The <e1>factory</e1>\'s products have included flower pots, Finnish rooster-whistles, pans, <e2>trays</e2>, tea pots, ash trays and air moisturisers')
     #item = sem_set.parse_sentence('The <e1>lawsonite</e1> was contained in a <e2>platinum crucible</e2> and the counter-weight was a plastic crucible with metal pieces')
-    train_loader = DataLoader(sem_set.train_data, 4, collate_fn = semeval_collate)
-    for i, item in enumerate(train_loader):
-        print(i, item)
-        break
+    # train_loader = DataLoader(sem_set.train_data, 4, collate_fn = semeval_collate)
+    # for i, item in enumerate(train_loader):
+    #     print(i, item)
+    #     break
